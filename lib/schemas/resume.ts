@@ -47,16 +47,28 @@ export const contactSchema = z.object({
     .or(z.literal(""))
 });
 
+export const layoutSchema = z.enum([
+  "classic",
+  "modern",
+  "minimal",
+  "two-column",
+  "compact"
+]);
+
 export const resumeSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
   title: z.string().min(1, "Title is required"),
   contact: contactSchema,
-  summary: z.string().min(1, "Summary is required"),
+  summary: z.string().optional(),
   experience: z.array(experienceItemSchema).default([]),
   education: z.array(educationItemSchema).default([]),
   skills: z.array(z.string().min(1)).default([]),
   projects: z.array(projectItemSchema).default([]),
-  photoUrl: z.string().url().optional()
+  photoUrl: z.string().url().optional(),
+  layout: layoutSchema.default("classic"),
+  activeSections: z
+    .array(z.enum(["summary", "experience", "education", "skills", "projects"]))
+    .default(["summary", "experience", "education", "skills", "projects"])
 });
 
 export type SectionId =
@@ -65,4 +77,5 @@ export type SectionId =
   | "education"
   | "skills"
   | "projects";
+export type LayoutType = z.infer<typeof layoutSchema>;
 export type ResumeData = z.infer<typeof resumeSchema>;
