@@ -19,8 +19,6 @@ export default function ATSPanel({
     [resumeText, jobDescription, data]
   );
 
-  console.log(resumeText);
-
   return (
     <Card className="sticky top-4 print:hidden shadow-sm">
       <CardHeader className="pb-3">
@@ -101,7 +99,9 @@ export default function ATSPanel({
         </div>
 
         <div className="grid gap-2">
-          <div className="text-sm font-medium">ATS Keywords</div>
+          <div className="text-sm font-medium">
+            {jobDescription ? "ATS Keywords" : "Industry Terms Found"}
+          </div>
           {jobDescription ? (
             <div className="flex flex-wrap gap-2">
               {metrics.presentKeywords.slice(0, 10).map((k) => (
@@ -123,10 +123,21 @@ export default function ATSPanel({
                 </Badge>
               ))}
             </div>
+          ) : metrics.presentKeywords.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              {metrics.presentKeywords.map((k) => (
+                <Badge
+                  key={k}
+                  variant="outline"
+                  className="border-green-600/30 text-green-700"
+                >
+                  {k}
+                </Badge>
+              ))}
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Provide a job description via “Build with AI” to see keyword
-              coverage.
+              Add more technical skills and industry terms to your resume.
             </p>
           )}
         </div>

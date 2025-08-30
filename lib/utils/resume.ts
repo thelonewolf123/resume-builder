@@ -164,8 +164,8 @@ export function computeResumeAtsMetrics(
   const text = String(resumeText || "").trim();
   const jd = String(jobDescription || "").trim();
 
-  // Early return for missing inputs
-  if (!text || !jd) {
+  // Handle missing inputs
+  if (!text) {
     return {
       wordCount: 0,
       sectionsFilled: 0,
@@ -173,9 +173,7 @@ export function computeResumeAtsMetrics(
       readability: 0,
       presentKeywords: [],
       missingKeywords: [],
-      suggestions: [
-        "Add resume content and job description to get ATS analysis"
-      ],
+      suggestions: ["Add resume content to get ATS analysis"],
       score: 0,
       keywordMatchRate: 0,
       contactCompleteness: 0,
@@ -184,6 +182,9 @@ export function computeResumeAtsMetrics(
       formatConsistency: 0
     };
   }
+
+  // If no job description, provide general resume analysis
+  const hasJobDescription = !!jd;
 
   // Enhanced word count with better tokenization
   const words = text.match(/\b[a-zA-Z]+\b/g) || [];
@@ -440,38 +441,50 @@ export function computeResumeAtsMetrics(
     return techPatterns.some((pattern) => pattern.test(term));
   };
 
-  // Extract keywords from both texts
+  // Extract keywords from resume text
   const resumeAnalysis = extractAdvancedKeywords(text);
-  const jdAnalysis = extractAdvancedKeywords(jd);
 
-  // Combine keywords and phrases for matching
-  const allJdTerms = new Set([...jdAnalysis.keywords, ...jdAnalysis.phrases]);
-  const allResumeTerms = new Set([
-    ...resumeAnalysis.keywords,
-    ...resumeAnalysis.phrases
-  ]);
-
-  // Find matches with weighted scoring
-  const presentKeywords: string[] = [];
+  // Handle keyword analysis based on whether job description exists
+  let presentKeywords: string[] = [];
   const missingKeywords: string[] = [];
+  let keywordMatchRate = 0;
+  let jdAnalysis: ReturnType<typeof extractAdvancedKeywords>;
 
-  Array.from(allJdTerms).forEach((term) => {
-    if (allResumeTerms.has(term)) {
-      presentKeywords.push(term);
-    } else {
-      // Check for partial matches or synonyms
-      const hasPartialMatch = Array.from(allResumeTerms).some(
-        (resumeTerm) => resumeTerm.includes(term) || term.includes(resumeTerm)
-      );
-      if (!hasPartialMatch) {
-        missingKeywords.push(term);
+  if (hasJobDescription) {
+    // Full keyword analysis with job description
+    jdAnalysis = extractAdvancedKeywords(jd);
+    const allJdTerms = new Set([...jdAnalysis.keywords, ...jdAnalysis.phrases]);
+    const allResumeTerms = new Set([
+      ...resumeAnalysis.keywords,
+      ...resumeAnalysis.phrases
+    ]);
+
+    Array.from(allJdTerms).forEach((term) => {
+      if (allResumeTerms.has(term)) {
+        presentKeywords.push(term);
+      } else {
+        // Check for partial matches or synonyms
+        const hasPartialMatch = Array.from(allResumeTerms).some(
+          (resumeTerm) => resumeTerm.includes(term) || term.includes(resumeTerm)
+        );
+        if (!hasPartialMatch) {
+          missingKeywords.push(term);
+        }
       }
-    }
-  });
+    });
 
-  // Calculate advanced metrics
-  const keywordMatchRate =
-    allJdTerms.size > 0 ? presentKeywords.length / allJdTerms.size : 0;
+    keywordMatchRate =
+      allJdTerms.size > 0 ? presentKeywords.length / allJdTerms.size : 0;
+  } else {
+    // Show industry terms from resume when no job description
+    presentKeywords = Array.from(resumeAnalysis.industryTerms).slice(0, 10);
+    jdAnalysis = {
+      keywords: new Set(),
+      phrases: new Set(),
+      industryTerms: new Set()
+    };
+    keywordMatchRate = 0; // Can't calculate without job description
+  }
 
   // Contact information completeness
   const calculateContactCompleteness = (): number => {
@@ -625,24 +638,42 @@ export function computeResumeAtsMetrics(
 
   // Comprehensive ATS score calculation with modern weighting
   const calculateComprehensiveATSScore = (): number => {
-    const sectionScore = (sectionsFilled / activeSectionCount) * 0.25; // 25% - Section completeness
-    const keywordScore = keywordMatchRate * 0.3; // 30% - Keyword alignment
-    const lengthScore = calculateOptimalLength() * 0.15; // 15% - Optimal length
-    const readabilityScore = readability * 0.1; // 10% - Readability
-    const contactScore = contactCompleteness * 0.05; // 5% - Contact completeness
-    const achievementScore = quantifiableAchievements * 0.1; // 10% - Quantifiable achievements
-    const industryScore = industryTerms * 0.05; // 5% - Industry terms
+    const sectionScore = (sectionsFilled / activeSectionCount) * 0.3; // 30% - Section completeness
+    const lengthScore = calculateOptimalLength() * 0.2; // 20% - Optimal length
+    const readabilityScore = readability * 0.15; // 15% - Readability
+    const contactScore = contactCompleteness * 0.1; // 10% - Contact completeness
+    const achievementScore = quantifiableAchievements * 0.15; // 15% - Quantifiable achievements
+    const formatScore = formatConsistency * 0.1; // 10% - Format consistency
 
-    return Math.round(
-      (sectionScore +
-        keywordScore +
-        lengthScore +
-        readabilityScore +
-        contactScore +
-        achievementScore +
-        industryScore) *
-        100
-    );
+    if (hasJobDescription) {
+      // Include keyword matching when job description is available
+      const keywordScore = keywordMatchRate * 0.25; // 25% - Keyword alignment
+      const industryScore = industryTerms * 0.05; // 5% - Industry terms
+
+      // Adjust other weights when including keyword scores
+      return Math.round(
+        (sectionScore * 0.85 + // Reduce section weight slightly
+          keywordScore +
+          lengthScore * 0.85 + // Reduce length weight slightly
+          readabilityScore * 0.85 + // Reduce readability weight slightly
+          contactScore +
+          achievementScore +
+          industryScore +
+          formatScore) *
+          100
+      );
+    } else {
+      // Focus on general resume quality without keyword matching
+      return Math.round(
+        (sectionScore +
+          lengthScore +
+          readabilityScore +
+          contactScore +
+          achievementScore +
+          formatScore) *
+          100
+      );
+    }
   };
 
   const calculateOptimalLength = (): number => {
@@ -700,18 +731,25 @@ export function computeResumeAtsMetrics(
     }
 
     // Keyword optimization suggestions
-    if (keywordMatchRate < 0.4) {
-      const priorityMissing = missingKeywords
-        .filter((keyword) => jdAnalysis.industryTerms.has(keyword))
-        .slice(0, 5);
+    if (hasJobDescription) {
+      if (keywordMatchRate < 0.4) {
+        const priorityMissing = missingKeywords
+          .filter((keyword) => jdAnalysis.industryTerms.has(keyword))
+          .slice(0, 5);
 
-      if (priorityMissing.length > 0) {
-        suggestions.push(
-          `Incorporate these high-priority keywords: ${priorityMissing.join(
-            ", "
-          )}`
-        );
+        if (priorityMissing.length > 0) {
+          suggestions.push(
+            `Incorporate these high-priority keywords: ${priorityMissing.join(
+              ", "
+            )}`
+          );
+        }
       }
+    } else {
+      // Suggest adding job description for better analysis
+      suggestions.push(
+        'Add a job description via "Build with AI" to get targeted keyword suggestions and improve ATS alignment.'
+      );
     }
 
     // Content quality suggestions
@@ -746,9 +784,13 @@ export function computeResumeAtsMetrics(
     }
 
     // Industry alignment
-    if (industryTerms < 0.5) {
+    if (hasJobDescription && industryTerms < 0.5) {
       suggestions.push(
         "Include more industry-specific terminology and technical skills mentioned in the job description."
+      );
+    } else if (!hasJobDescription && resumeAnalysis.industryTerms.size < 3) {
+      suggestions.push(
+        "Include more industry-specific terminology and technical skills relevant to your field."
       );
     }
 
@@ -780,10 +822,18 @@ export function computeResumeAtsMetrics(
     missingKeywords: missingKeywords.slice(0, 15),
     suggestions,
     score,
-    keywordMatchRate: Math.round(keywordMatchRate * 100),
+    keywordMatchRate: hasJobDescription
+      ? Math.round(keywordMatchRate * 100)
+      : 0,
     contactCompleteness: Math.round(contactCompleteness * 100),
     quantifiableAchievements: Math.round(quantifiableAchievements * 100),
-    industryTerms: Math.round(industryTerms * 100),
+    industryTerms: hasJobDescription
+      ? Math.round(industryTerms * 100)
+      : Math.round(
+          (resumeAnalysis.industryTerms.size /
+            Math.max(10, resumeAnalysis.keywords.size / 10)) *
+            100
+        ),
     formatConsistency: Math.round(formatConsistency * 100)
   };
 }
